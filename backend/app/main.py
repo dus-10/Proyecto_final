@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-
+from app.api.usuarios import router as usuarios_router
 from app.db import Base, engine
 
 from app.models.usuario import Usuario
@@ -12,7 +12,7 @@ app = FastAPI(
     title="Sistema de Reservas",
     version="1.0"
 )
-
+app.include_router(usuarios_router)
 
 @app.get("/")
 def root():
