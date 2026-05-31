@@ -163,3 +163,15 @@ def actualizar_estado_reserva(
     return {
         "mensaje": f"Reserva {datos.estado} correctamente"
     }
+
+@router.get("/mis-reservas")
+def mis_reservas(
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user)
+):
+
+    reservas = db.query(Reserva).filter(
+        Reserva.id_usuario == usuario.id_usuario
+    ).all()
+
+    return reservas
