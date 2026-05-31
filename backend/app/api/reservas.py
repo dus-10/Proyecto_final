@@ -5,6 +5,8 @@ from sqlalchemy import and_
 from app.db import get_db
 from app.models.reserva import Reserva
 from app.models.espacio import Espacio
+from app.schemas.estado_reserva import EstadoReservaUpdate
+from app.auth.dependencies import get_admin_user
 from app.schemas.reserva import (
     ReservaCreate,
     ReservaResponse
@@ -26,6 +28,8 @@ def crear_reserva(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user)
 ):
+
+
 
     if reserva.hora_inicio >= reserva.hora_fin:
         raise HTTPException(
@@ -123,3 +127,39 @@ def crear_reserva(
     db.refresh(nueva_reserva)
 
     return nueva_reserva
+
+@router.patch("/{id_reserva}/estado")
+def actualizar_estado_reserva(
+    id_reserva: int,
+    datos: EstadoReservaUpdate,
+    db: Session = Depends(get_db),
+    admin=Depends(get_admin_user)
+):
+
+    reserva = db.query(Reserva).filter(
+        Reserva.id_reserva == id_reserva
+    ).first()
+
+    if not reserva:
+        raise HTTPException(
+            status_code=404,
+            detail="Reserva no encontrada"
+        )
+
+    if datos.estado not in [
+        "aprobada",
+        "rechazada"
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail="Estado inválido"
+        )
+
+    reserva.estado = datos.estado
+
+    db.commit()
+    db.refresh(reserva)
+
+    return {
+        "mensaje": f"Reserva {datos.estado} correctamente"
+    }
