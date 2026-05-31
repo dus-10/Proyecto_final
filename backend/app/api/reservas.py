@@ -1,0 +1,125 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from sqlalchemy import and_
+from app.db import get_db
+from app.models.reserva import Reserva
+from app.models.espacio import Espacio
+from app.schemas.reserva import (
+    ReservaCreate,
+    ReservaResponse
+)
+from app.auth.dependencies import get_current_user
+
+router = APIRouter(
+    prefix="/reservas",
+    tags=["Reservas"]
+)
+
+
+@router.post(
+    "/",
+    response_model=ReservaResponse
+)
+def crear_reserva(
+    reserva: ReservaCreate,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user)
+):
+
+    if reserva.hora_inicio >= reserva.hora_fin:
+        raise HTTPException(
+            status_code=400,
+            detail="La hora de inicio debe ser menor que la hora final"
+        )
+
+    espacio = db.query(Espacio).filter(
+    Espacio.id_espacio == reserva.id_espacio
+    ).first()
+
+    if not espacio:
+        raise HTTPException(
+            status_code=404,
+         detail="Espacio no encontrado"
+        )
+
+    if espacio.estado.lower() != "activo":
+        raise HTTPException(
+            status_code=400,
+            detail="El espacio no está disponible para reservas"
+        )
+
+    if reserva.cantidad_asistentes > espacio.capacidad:
+        raise HTTPException(
+            status_code=400,
+            detail="La cantidad de asistentes supera la capacidad del espacio"
+        )
+
+    fecha_reserva = datetime.combine(
+    reserva.fecha,
+    reserva.hora_inicio
+)
+
+    if fecha_reserva < datetime.now() + timedelta(hours=24):
+        raise HTTPException(
+            status_code=400,
+            detail="La reserva debe realizarse con al menos 24 horas de anticipación"
+        )
+
+    dia_semana = reserva.fecha.weekday()
+
+    if dia_semana == 6:
+        raise HTTPException(
+            status_code=400,
+            detail="No se permiten reservas los domingos"
+        )
+
+    if dia_semana <= 4:
+        if (
+            reserva.hora_inicio.hour < 7 or
+            reserva.hora_fin.hour > 20
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Horario permitido: 07:00 a 20:00"
+            )
+
+    if dia_semana == 5:
+        if (
+            reserva.hora_inicio.hour < 8 or
+            reserva.hora_fin.hour > 12
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Horario permitido los sábados: 08:00 a 12:00"
+            )
+
+    conflicto = db.query(Reserva).filter(
+        Reserva.id_espacio == reserva.id_espacio,
+        Reserva.fecha == reserva.fecha,
+        Reserva.estado.in_(["esperando", "aprobada"]),
+        Reserva.hora_inicio < reserva.hora_fin,
+        Reserva.hora_fin > reserva.hora_inicio
+).first()
+
+    if conflicto:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya existe una reserva para este espacio en ese horario"
+        )
+
+    nueva_reserva = Reserva(
+        id_usuario=usuario.id_usuario,
+        id_espacio=reserva.id_espacio,
+        fecha=reserva.fecha,
+        hora_inicio=reserva.hora_inicio,
+        hora_fin=reserva.hora_fin,
+        cantidad_asistentes=reserva.cantidad_asistentes,
+        estado="esperando"
+    )
+
+    db.add(nueva_reserva)
+    db.commit()
+    db.refresh(nueva_reserva)
+
+    return nueva_reserva
