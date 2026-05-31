@@ -175,3 +175,47 @@ def mis_reservas(
     ).all()
 
     return reservas
+
+@router.get("/")
+def obtener_todas_las_reservas(
+    db: Session = Depends(get_db),
+    admin=Depends(get_admin_user)
+):
+
+    reservas = db.query(Reserva).all()
+
+    return reservas
+
+@router.delete("/{id_reserva}")
+def cancelar_reserva(
+    id_reserva: int,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user)
+):
+
+    reserva = db.query(Reserva).filter(
+        Reserva.id_reserva == id_reserva
+    ).first()
+
+    if not reserva:
+        raise HTTPException(
+            status_code=404,
+            detail="Reserva no encontrada"
+        )
+
+    if (
+        reserva.id_usuario != usuario.id_usuario
+        and usuario.rol != "admin"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="No tiene permisos para cancelar esta reserva"
+        )
+
+    reserva.estado = "cancelada"
+
+    db.commit()
+
+    return {
+        "mensaje": "Reserva cancelada correctamente"
+    }
