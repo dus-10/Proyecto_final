@@ -4,6 +4,7 @@ from app.auth.security import hash_password
 from app.db import get_db
 from app.models.usuario import Usuario
 from app.schemas.usuario import UsuarioCreate, UsuarioResponse
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/usuarios",
@@ -32,6 +33,7 @@ def crear_usuario(
 
 @router.get("/", response_model=list[UsuarioResponse])
 def listar_usuarios(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
     return db.query(Usuario).all()
