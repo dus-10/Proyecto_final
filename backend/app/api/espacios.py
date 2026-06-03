@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.db import get_db
 from app.models.espacio import Espacio
@@ -51,3 +52,28 @@ def listar_espacios(
     usuario=Depends(get_current_user)
 ):
     return db.query(Espacio).all()
+
+
+@router.delete("/{id_espacio}")
+def eliminar_espacio(
+    id_espacio: int,
+    db: Session = Depends(get_db),
+    admin=Depends(get_admin_user)
+):
+
+    espacio = db.query(Espacio).filter(
+        Espacio.id_espacio == id_espacio
+    ).first()
+
+    if not espacio:
+        raise HTTPException(
+            status_code=404,
+            detail="Espacio no encontrado"
+        )
+
+    db.delete(espacio)
+    db.commit()
+
+    return {
+        "mensaje": "Espacio eliminado correctamente"
+    }
