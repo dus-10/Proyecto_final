@@ -21,4 +21,36 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+
+# === Entornos Virtuales y Python ===
 .venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# === Configuración del Sistema y Editores ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# === Variables de Entorno y Datos Sensibles ===
+.env
+.env.local
+.env.*.local
+
+# === Archivos de Diseño / UX (Opcional, por si exportas locales) ===
+*.sketch
+*.fig

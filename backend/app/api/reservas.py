@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time as time_type
 from sqlalchemy import and_
 from app.db import get_db
 from app.models.reserva import Reserva
@@ -19,18 +19,49 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "/",
-    response_model=ReservaResponse
-)
+
+@router.get("/disponibilidad")
+def verificar_disponibilidad(
+    id_espacio: int,
+    fecha: str,
+    hora_inicio: str,
+    hora_fin: str,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user)
+):
+    try:
+        fecha_obj      = date.fromisoformat(fecha)
+        hora_inicio_obj = time_type.fromisoformat(hora_inicio)
+        hora_fin_obj    = time_type.fromisoformat(hora_fin)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha u hora inválido")
+
+    conflicto = db.query(Reserva).filter(
+        and_(
+            Reserva.id_espacio == id_espacio,
+            Reserva.fecha == fecha_obj,
+            Reserva.estado.in_(["esperando", "aprobada"]),
+            Reserva.hora_inicio < hora_fin_obj,
+            Reserva.hora_fin > hora_inicio_obj
+        )
+    ).first()
+
+    if conflicto:
+        return {
+            "disponible": False,
+            "mensaje": f"El espacio ya tiene una reserva de {conflicto.hora_inicio} a {conflicto.hora_fin}"
+        }
+
+    return {"disponible": True, "mensaje": "El espacio está disponible"}
+
+
+
+@router.post("/", response_model=ReservaResponse)
 def crear_reserva(
     reserva: ReservaCreate,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user)
 ):
-
-
-
     if reserva.hora_inicio >= reserva.hora_fin:
         raise HTTPException(
             status_code=400,
@@ -38,14 +69,11 @@ def crear_reserva(
         )
 
     espacio = db.query(Espacio).filter(
-    Espacio.id_espacio == reserva.id_espacio
+        Espacio.id_espacio == reserva.id_espacio
     ).first()
 
     if not espacio:
-        raise HTTPException(
-            status_code=404,
-         detail="Espacio no encontrado"
-        )
+        raise HTTPException(status_code=404, detail="Espacio no encontrado")
 
     if espacio.estado.lower() != "activo":
         raise HTTPException(
@@ -59,10 +87,7 @@ def crear_reserva(
             detail="La cantidad de asistentes supera la capacidad del espacio"
         )
 
-    fecha_reserva = datetime.combine(
-    reserva.fecha,
-    reserva.hora_inicio
-)
+    fecha_reserva = datetime.combine(reserva.fecha, reserva.hora_inicio)
 
     if fecha_reserva < datetime.now() + timedelta(hours=24):
         raise HTTPException(
@@ -79,20 +104,14 @@ def crear_reserva(
         )
 
     if dia_semana <= 4:
-        if (
-            reserva.hora_inicio.hour < 7 or
-            reserva.hora_fin.hour > 20
-        ):
+        if reserva.hora_inicio.hour < 7 or reserva.hora_fin.hour > 20:
             raise HTTPException(
                 status_code=400,
                 detail="Horario permitido: 07:00 a 20:00"
             )
 
     if dia_semana == 5:
-        if (
-            reserva.hora_inicio.hour < 8 or
-            reserva.hora_fin.hour > 12
-        ):
+        if reserva.hora_inicio.hour < 8 or reserva.hora_fin.hour > 12:
             raise HTTPException(
                 status_code=400,
                 detail="Horario permitido los sábados: 08:00 a 12:00"
@@ -104,7 +123,7 @@ def crear_reserva(
         Reserva.estado.in_(["esperando", "aprobada"]),
         Reserva.hora_inicio < reserva.hora_fin,
         Reserva.hora_fin > reserva.hora_inicio
-).first()
+    ).first()
 
     if conflicto:
         raise HTTPException(
@@ -128,6 +147,8 @@ def crear_reserva(
 
     return nueva_reserva
 
+
+
 @router.patch("/{id_reserva}/estado")
 def actualizar_estado_reserva(
     id_reserva: int,
@@ -135,56 +156,43 @@ def actualizar_estado_reserva(
     db: Session = Depends(get_db),
     admin=Depends(get_admin_user)
 ):
-
     reserva = db.query(Reserva).filter(
         Reserva.id_reserva == id_reserva
     ).first()
 
     if not reserva:
-        raise HTTPException(
-            status_code=404,
-            detail="Reserva no encontrada"
-        )
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    if datos.estado not in [
-        "aprobada",
-        "rechazada"
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail="Estado inválido"
-        )
+    if datos.estado not in ["aprobada", "rechazada"]:
+        raise HTTPException(status_code=400, detail="Estado inválido")
 
     reserva.estado = datos.estado
-
     db.commit()
     db.refresh(reserva)
 
-    return {
-        "mensaje": f"Reserva {datos.estado} correctamente"
-    }
+    return {"mensaje": f"Reserva {datos.estado} correctamente"}
+
+
 
 @router.get("/mis-reservas")
 def mis_reservas(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user)
 ):
-
-    reservas = db.query(Reserva).filter(
+    return db.query(Reserva).filter(
         Reserva.id_usuario == usuario.id_usuario
     ).all()
 
-    return reservas
+
 
 @router.get("/")
 def obtener_todas_las_reservas(
     db: Session = Depends(get_db),
     admin=Depends(get_admin_user)
 ):
+    return db.query(Reserva).all()
 
-    reservas = db.query(Reserva).all()
 
-    return reservas
 
 @router.delete("/{id_reserva}")
 def cancelar_reserva(
@@ -192,30 +200,20 @@ def cancelar_reserva(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user)
 ):
-
     reserva = db.query(Reserva).filter(
         Reserva.id_reserva == id_reserva
     ).first()
 
     if not reserva:
-        raise HTTPException(
-            status_code=404,
-            detail="Reserva no encontrada"
-        )
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    if (
-        reserva.id_usuario != usuario.id_usuario
-        and usuario.rol != "admin"
-    ):
+    if reserva.id_usuario != usuario.id_usuario and usuario.rol != "admin":
         raise HTTPException(
             status_code=403,
             detail="No tiene permisos para cancelar esta reserva"
         )
 
     reserva.estado = "cancelada"
-
     db.commit()
 
-    return {
-        "mensaje": "Reserva cancelada correctamente"
-    }
+    return {"mensaje": "Reserva cancelada correctamente"}

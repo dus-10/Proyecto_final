@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16
+    container_name: reservas_db
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 061024
+      POSTGRES_DB: reservas_db
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - reservas_network
+
+  backend:
+    build: ./backend
+    container_name: reservas_backend
+    command: sh -c "sleep 15 && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+    environment:
+      DB_USER: postgres
+      DB_PASSWORD: 061024
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: reservas_db
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      - db
+
+    networks:
+      - reservas_network
+
+  frontend:
+    build: ./frontend
+    container_name: reservas_frontend
+
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      - backend
+
+    networks:
+      - reservas_network
+
+volumes:
+  postgres_data:
+
+networks:
+  reservas_network:
