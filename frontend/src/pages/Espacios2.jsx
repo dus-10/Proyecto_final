@@ -1,77 +1,80 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import "./section.css"
 import "./modal.css"
 
 const API = "http://127.0.0.1:8000"
 
-const DISP = {
-  idle:        "idle",
-  checking:    "checking",
-  available:   "available",
-  unavailable: "unavailable"
+const DISPONIBILIDAD = {
+  idle:       null,
+  checking:   "checking",
+  available:  "available",
+  unavailable:"unavailable"
 }
 
 function Espacios() {
-  const [espacios,       setEspacios]       = useState([])
-  const [loading,        setLoading]        = useState(true)
-  const [formOpen,       setFormOpen]       = useState(false)
-  const [modalEspacio,   setModalEspacio]   = useState(null)
-  const [editEspacio,    setEditEspacio]    = useState(null)
-  const [disponibilidad, setDisponibilidad] = useState(DISP.idle)
-  const [mensajeDisp,    setMensajeDisp]    = useState("")
+  const [espacios,      setEspacios]      = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [formOpen,      setFormOpen]      = useState(false)
+  const [modalEspacio,  setModalEspacio]  = useState(null)
+  const [disponibilidad, setDisponibilidad] = useState(DISPONIBILIDAD.idle)
+  const [mensajeDisp,   setMensajeDisp]   = useState("")
 
-  const rol   = localStorage.getItem("rol")
-  const token = () => localStorage.getItem("token")
+  const rol = localStorage.getItem("rol")
 
   const [nuevo, setNuevo] = useState({
     nombre: "", ubicacion: "", capacidad: "", estado: "activo"
-  })
-
-  const [editForm, setEditForm] = useState({
-    nombre: "", ubicacion: "", capacidad: "", estado: ""
   })
 
   const [reservaForm, setReservaForm] = useState({
     fecha: "", hora_inicio: "", hora_fin: "", cantidad_asistentes: ""
   })
 
+  const token = () => localStorage.getItem("token")
+
   useEffect(() => { cargarEspacios() }, [])
 
-  // Verificar disponibilidad con debounce
+  // Verificar disponibilidad cuando fecha + horas estén completas
   useEffect(() => {
     const { fecha, hora_inicio, hora_fin } = reservaForm
     if (!modalEspacio || !fecha || !hora_inicio || !hora_fin) {
-      setDisponibilidad(DISP.idle)
+      setDisponibilidad(DISPONIBILIDAD.idle)
       return
     }
     if (hora_inicio >= hora_fin) {
-      setDisponibilidad(DISP.unavailable)
+      setDisponibilidad(DISPONIBILIDAD.unavailable)
       setMensajeDisp("La hora de fin debe ser mayor a la hora de inicio")
       return
     }
+
     const timer = setTimeout(() => verificarDisponibilidad(fecha, hora_inicio, hora_fin), 500)
     return () => clearTimeout(timer)
   }, [reservaForm.fecha, reservaForm.hora_inicio, reservaForm.hora_fin, modalEspacio])
 
   const verificarDisponibilidad = async (fecha, hora_inicio, hora_fin) => {
-    setDisponibilidad(DISP.checking)
+    setDisponibilidad(DISPONIBILIDAD.checking)
     try {
-      const params = new URLSearchParams({ id_espacio: modalEspacio.id_espacio, fecha, hora_inicio, hora_fin })
+      const params = new URLSearchParams({
+        id_espacio: modalEspacio.id_espacio,
+        fecha, hora_inicio, hora_fin
+      })
       const res  = await fetch(`${API}/reservas/disponibilidad?${params}`, {
         headers: { Authorization: `Bearer ${token()}` }
       })
       const data = await res.json()
-      setDisponibilidad(data.disponible ? DISP.available : DISP.unavailable)
+      setDisponibilidad(data.disponible ? DISPONIBILIDAD.available : DISPONIBILIDAD.unavailable)
       setMensajeDisp(data.mensaje)
     } catch {
-      setDisponibilidad(DISP.idle)
+      setDisponibilidad(DISPONIBILIDAD.idle)
+      setMensajeDisp("")
     }
   }
 
   const cargarEspacios = async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`${API}/espacios/`, { headers: { Authorization: `Bearer ${token()}` } })
+      const res  = await fetch(`${API}/espacios/`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      })
       const data = await res.json()
       setEspacios(Array.isArray(data) ? data : [])
     } finally {
@@ -96,32 +99,6 @@ function Espacios() {
     }
   }
 
-  const abrirEditar = (esp) => {
-    setEditEspacio(esp)
-    setEditForm({
-      nombre:    esp.nombre,
-      ubicacion: esp.ubicacion,
-      capacidad: esp.capacidad,
-      estado:    esp.estado
-    })
-  }
-
-  const guardarEdicion = async (e) => {
-    e.preventDefault()
-    const res = await fetch(`${API}/espacios/${editEspacio.id_espacio}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-      body: JSON.stringify({ ...editForm, capacidad: Number(editForm.capacidad) })
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setEditEspacio(null)
-      cargarEspacios()
-    } else {
-      alert(data.detail)
-    }
-  }
-
   const eliminarEspacio = async (id) => {
     if (!confirm("¿Eliminar este espacio?")) return
     const res = await fetch(`${API}/espacios/${id}`, {
@@ -134,19 +111,20 @@ function Espacios() {
   const abrirModal = (espacio) => {
     setModalEspacio(espacio)
     setReservaForm({ fecha: "", hora_inicio: "", hora_fin: "", cantidad_asistentes: "" })
-    setDisponibilidad(DISP.idle)
+    setDisponibilidad(DISPONIBILIDAD.idle)
     setMensajeDisp("")
   }
 
   const cerrarModal = () => {
     setModalEspacio(null)
-    setDisponibilidad(DISP.idle)
+    setDisponibilidad(DISPONIBILIDAD.idle)
     setMensajeDisp("")
   }
 
   const crearReserva = async (e) => {
     e.preventDefault()
-    if (disponibilidad !== DISP.available) return
+    if (disponibilidad !== DISPONIBILIDAD.available) return
+
     const res = await fetch(`${API}/reservas/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
@@ -165,7 +143,9 @@ function Espacios() {
     }
   }
 
-  const puedeConfirmar = disponibilidad === DISP.available && reservaForm.cantidad_asistentes !== ""
+  const puedeConfirmar =
+    disponibilidad === DISPONIBILIDAD.available &&
+    reservaForm.cantidad_asistentes !== ""
 
   return (
     <div className="section">
@@ -189,7 +169,7 @@ function Espacios() {
         )}
       </div>
 
-      {/* ── Formulario crear ── */}
+      {/* ── Formulario crear espacio ── */}
       {formOpen && rol === "admin" && (
         <div className="card section__form">
           <h3 style={{ marginBottom: "1.25rem" }}>Crear nuevo espacio</h3>
@@ -253,9 +233,7 @@ function Espacios() {
                   {esp.estado}
                 </span>
               </div>
-
               <h3 className="espacio-card__name">{esp.nombre}</h3>
-
               <div className="espacio-card__meta">
                 <span className="espacio-card__meta-item">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -273,26 +251,17 @@ function Espacios() {
                   {esp.capacidad} personas
                 </span>
               </div>
-
               <div className="espacio-card__actions">
                 <button className="btn-primary espacio-card__reservar" onClick={() => abrirModal(esp)}>
                   Reservar
                 </button>
                 {rol === "admin" && (
-                  <>
-                    <button className="btn-warning espacio-card__edit" onClick={() => abrirEditar(esp)} title="Editar">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                    <button className="btn-danger espacio-card__delete" onClick={() => eliminarEspacio(esp.id_espacio)} title="Eliminar">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                        <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      </svg>
-                    </button>
-                  </>
+                  <button className="btn-danger espacio-card__delete" onClick={() => eliminarEspacio(esp.id_espacio)} title="Eliminar">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
                 )}
               </div>
             </div>
@@ -300,70 +269,11 @@ function Espacios() {
         </div>
       )}
 
-      {/* ── Modal editar espacio ── */}
-      {editEspacio && (
-        <div className="modal-overlay" onClick={() => setEditEspacio(null)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-header__info">
-                <div className="modal-header__icon" style={{ background: "#fef9c3", color: "#b45309" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="modal-header__title">Editar espacio</h3>
-                  <p className="modal-header__sub">{editEspacio.nombre}</p>
-                </div>
-              </div>
-              <button className="modal-close" onClick={() => setEditEspacio(null)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
-
-            <hr className="modal-divider" />
-
-            <form onSubmit={guardarEdicion} className="modal-form">
-              <div className="form-group" style={{ gridColumn: "span 2" }}>
-                <label>Nombre</label>
-                <input value={editForm.nombre}
-                  onChange={e => setEditForm({ ...editForm, nombre: e.target.value })} required />
-              </div>
-              <div className="form-group" style={{ gridColumn: "span 2" }}>
-                <label>Ubicación</label>
-                <input value={editForm.ubicacion}
-                  onChange={e => setEditForm({ ...editForm, ubicacion: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>Capacidad</label>
-                <input type="number" min="1" value={editForm.capacidad}
-                  onChange={e => setEditForm({ ...editForm, capacidad: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>Estado</label>
-                <select value={editForm.estado}
-                  onChange={e => setEditForm({ ...editForm, estado: e.target.value })}>
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
-                </select>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn-ghost" onClick={() => setEditEspacio(null)}>Cancelar</button>
-                <button type="submit" className="btn-primary">Guardar cambios</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal reservar ── */}
+      {/* ── Modal de reserva ── */}
       {modalEspacio && (
         <div className="modal-overlay" onClick={cerrarModal}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
+
             <div className="modal-header">
               <div className="modal-header__info">
                 <div className="modal-header__icon">
@@ -376,7 +286,9 @@ function Espacios() {
                 </div>
                 <div>
                   <h3 className="modal-header__title">Reservar: {modalEspacio.nombre}</h3>
-                  <p className="modal-header__sub">{modalEspacio.ubicacion} · {modalEspacio.capacidad} personas</p>
+                  <p className="modal-header__sub">
+                    {modalEspacio.ubicacion} · {modalEspacio.capacidad} personas
+                  </p>
                 </div>
               </div>
               <button className="modal-close" onClick={cerrarModal}>
@@ -390,31 +302,53 @@ function Espacios() {
             <hr className="modal-divider" />
 
             <form onSubmit={crearReserva} className="modal-form">
+
               <div className="form-group" style={{ gridColumn: "span 2" }}>
                 <label>Fecha</label>
                 <input type="date" value={reservaForm.fecha}
                   min={new Date().toISOString().split("T")[0]}
                   onChange={e => setReservaForm({ ...reservaForm, fecha: e.target.value })} required />
               </div>
+
               <div className="form-group">
                 <label>Hora inicio</label>
                 <input type="time" value={reservaForm.hora_inicio}
                   onChange={e => setReservaForm({ ...reservaForm, hora_inicio: e.target.value })} required />
               </div>
+
               <div className="form-group">
                 <label>Hora fin</label>
                 <input type="time" value={reservaForm.hora_fin}
                   onChange={e => setReservaForm({ ...reservaForm, hora_fin: e.target.value })} required />
               </div>
 
-              {disponibilidad !== DISP.idle && (
+              {/* ── Indicador de disponibilidad ── */}
+              {disponibilidad !== DISPONIBILIDAD.idle && (
                 <div className={`disp-banner disp-banner--${disponibilidad}`} style={{ gridColumn: "span 2" }}>
-                  {disponibilidad === DISP.checking && (<><span className="disp-spinner" /> Verificando disponibilidad…</>)}
-                  {disponibilidad === DISP.available && (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{mensajeDisp}</>
+                  {disponibilidad === DISPONIBILIDAD.checking && (
+                    <>
+                      <span className="disp-spinner" />
+                      Verificando disponibilidad…
+                    </>
                   )}
-                  {disponibilidad === DISP.unavailable && (
-                    <><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{mensajeDisp}</>
+                  {disponibilidad === DISPONIBILIDAD.available && (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {mensajeDisp}
+                    </>
+                  )}
+                  {disponibilidad === DISPONIBILIDAD.unavailable && (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                        <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      {mensajeDisp}
+                    </>
                   )}
                 </div>
               )}
@@ -429,12 +363,16 @@ function Espacios() {
 
               <div className="modal-footer">
                 <button type="button" className="btn-ghost" onClick={cerrarModal}>Cancelar</button>
-                <button type="submit" className="btn-primary"
+                <button
+                  type="submit"
+                  className="btn-primary"
                   disabled={!puedeConfirmar}
-                  style={{ opacity: puedeConfirmar ? 1 : 0.5, cursor: puedeConfirmar ? "pointer" : "not-allowed" }}>
+                  style={{ opacity: puedeConfirmar ? 1 : 0.5, cursor: puedeConfirmar ? "pointer" : "not-allowed" }}
+                >
                   Confirmar reserva
                 </button>
               </div>
+
             </form>
           </div>
         </div>

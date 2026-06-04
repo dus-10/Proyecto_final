@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class EspacioCreate(BaseModel):
@@ -7,13 +6,6 @@ class EspacioCreate(BaseModel):
     ubicacion: str
     capacidad: int
     estado: str
-
-
-class EspacioUpdate(BaseModel):
-    nombre: Optional[str] = None
-    ubicacion: Optional[str] = None
-    capacidad: Optional[int] = None
-    estado: Optional[str] = None
 
 
 class EspacioResponse(BaseModel):
